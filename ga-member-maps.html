@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<title>Georgia Member Distribution — Child Health Policy</title>
+<style>
+  @page { size: letter landscape; margin: .35in; }
+  body { font:11px/1.4 "Helvetica Neue",Arial,sans-serif; margin:14px; color:#222; }
+  h1 { font-size:16px; margin:0 0 2px; }
+  .sub { color:#666; font-size:10px; margin-bottom:8px; }
+  .page { page-break-after:always; }
+  .page:last-child { page-break-after:auto; }
+  .row { display:flex; gap:14px; align-items:flex-start; }
+  .mapbox { flex:0 0 55%; }
+  h2 { font-size:11px; text-transform:uppercase; letter-spacing:.5px;
+       color:#444; border-bottom:1px solid #ddd; padding-bottom:3px; margin:0 0 6px; }
+  svg { width:100%; height:auto; display:block; }
+  .county   { fill:#f2f4f6; stroke:#c8cdd3; stroke-width:.5; }
+  .mk-dot    { fill:#1d4e89; fill-opacity:.78; stroke:#fff; stroke-width:.7; }
+  .mk-square { fill:#c2571a; fill-opacity:.82; stroke:#fff; stroke-width:.7; }
+  table { width:100%; border-collapse:collapse; font-size:9px; }
+  th { text-align:left; background:#eef1f4; padding:3px 4px; border-bottom:1px solid #ccc; }
+  td { padding:2px 4px; border-bottom:1px solid #f0f0f0; }
+  td.n { text-align:right; font-weight:600; font-variant-numeric:tabular-nums; }
+  .legend { margin-top:6px; font-size:9px; color:#555; }
+  .key { display:inline-block; width:9px; height:9px; margin-right:3px; vertical-align:-1px; }
+  .note { margin-top:8px; font-size:8px; color:#888; font-style:italic; }
+  #err { display:none; background:#fff3cd; border:1px solid #ffe08a;
+         padding:10px; font-size:11px; margin-bottom:10px; }
+  @media print { #err { display:none !important; } }
+</style></head>
+<body>
+<div id="err"></div>
+
+<!-- PAGE 1 -->
+<div class="page">
+  <h1>Member Distribution — Metro &amp; Statewide Concentration</h1>
+  <div class="sub">199 Georgia members · 110 ZIP codes · Counties unlabeled · <span class="ts"></span></div>
+  <div class="row">
+    <div class="mapbox">
+      <h2>Member Locations — State Legislative Reference</h2>
+      <svg id="svg1" viewBox="0 0 560 680"></svg>
+      <div class="legend">
+        <span class="key mk-dot" style="border-radius:50%"></span>Member concentration
+        (area ∝ count) · <span class="key" style="background:#f2f4f6;border:1px solid #c8cdd3"></span>County
+      </div>
+    </div>
+    <div style="flex:1">
+      <h2>Top ZIP Concentrations</h2>
+      <table><thead><tr><th>ZIP</th><th>Area</th><th class="n">Mbrs</th></tr></thead>
+      <tbody id="t1"></tbody></table>
+      <p class="note">State House district assignment requires spatial join to 2023
+      boundaries — ZIPs split across districts cannot be assigned by hand reliably.
+      Table shows verified ZIP-level counts.</p>
+    </div>
+  </div>
+</div>
+
+<!-- PAGE 2 -->
+<div class="page">
+  <h1>Member Distribution by U.S. Congressional District</h1>
+  <div class="sub">Same member set, federal overlay · <span class="ts"></span></div>
+  <div class="row">
+    <div class="mapbox">
+      <h2>U.S. Congressional Districts (2023 Map)</h2>
+      <svg id="svg2" viewBox="0 0 560 680"></svg>
+      <div class="legend">
+        <span class="key mk-square"></span>Member concentration (area ∝ count)
+      </div>
+    </div>
+    <div style="flex:1">
+      <h2>Members by Congressional District</h2>
+      <table><thead><tr><th>CD</th><th>Region</th><th class="n">Mbrs</th></tr></thead>
+      <tbody id="t2"></tbody></table>
+      <p class="note">Congressional estimates from ZIP-centroid assignment.
+      Verify Columbia County (30809/30907) and Cobb-area ZIPs against current
+      boundaries before external distribution.</p>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3"></script>
+<script>
+document.querySelectorAll('.ts').forEach(e=>e.textContent=
+  new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'}));
+
+// zip : [lat, lon, members, area]
+const Z = {
+"30075":[34.04,-84.36,4,"Roswell"],"30039":[33.84,-84.00,2,"Snellville"],
+"30307":[33.77,-84.33,5,"Atlanta–Druid Hills"],"30087":[33.81,-84.14,1,"Stone Mountain"],
+"30329":[33.83,-84.32,5,"Atlanta–N. Druid Hills"],"30548":[34.09,-83.77,2,"Hoschton"],
+"30318":[33.79,-84.44,2,"Atlanta–West"],"30152":[33.98,-84.66,2,"Kennesaw"],
+"30022":[34.03,-84.23,3,"Alpharetta"],"31410":[32.03,-80.99,3,"Savannah"],
+"30052":[33.83,-83.90,3,"Loganville"],"30269":[33.40,-84.57,1,"Peachtree City"],
+"30809":[33.55,-82.14,7,"Evans"],"30125":[34.01,-85.25,1,"Cedartown"],
+"30342":[33.88,-84.37,6,"Sandy Springs"],"31705":[31.55,-84.06,1,"Albany"],
+"30068":[33.96,-84.44,2,"Marietta–East"],"30907":[33.52,-82.09,2,"Martinez"],
+"30024":[34.06,-84.07,2,"Suwanee"],"30030":[33.77,-84.30,5,"Decatur"],
+"31029":[33.05,-83.93,3,"Forsyth"],"30028":[34.25,-84.19,3,"Cumming"],
+"30002":[33.77,-84.26,1,"Avondale Estates"],"31794":[31.45,-83.51,2,"Tifton"],
+"30622":[33.93,-83.53,1,"Bogart"],"30324":[33.82,-84.35,1,"Atlanta–Morningside"],
+"31909":[32.55,-84.92,1,"Columbus"],"30501":[34.31,-83.82,1,"Gainesville"],
+"30127":[33.86,-84.69,1,"Powder Springs"],"30060":[33.93,-84.55,1,"Marietta"],
+"30097":[34.02,-84.14,3,"Duluth"],"30062":[34.01,-84.47,3,"Marietta–NE"],
+"30345":[33.85,-84.28,4,"Atlanta–Northlake"],"30189":[34.11,-84.56,2,"Woodstock"],
+"30144":[34.03,-84.58,1,"Kennesaw"],"30319":[33.87,-84.33,4,"Brookhaven"],
+"31032":[33.00,-83.53,3,"Gray"],"30312":[33.74,-84.37,2,"Atlanta–Grant Park"],
+"30044":[33.92,-84.07,1,"Lawrenceville"],"30240":[33.03,-85.06,1,"LaGrange"],
+"30720":[34.78,-84.99,1,"Dalton"],"31768":[31.17,-83.79,1,"Moultrie"],
+"30116":[33.56,-85.02,1,"Carrollton"],"30306":[33.79,-84.35,2,"Atlanta–Virginia Hld"],
+"30092":[33.96,-84.23,1,"Peachtree Corners"],"30310":[33.72,-84.42,1,"Atlanta–SW"],
+"30327":[33.86,-84.42,2,"Atlanta–Buckhead"],"30080":[33.87,-84.52,3,"Smyrna"],
+"30316":[33.72,-84.33,4,"Atlanta–East"],"30350":[34.00,-84.33,2,"Sandy Springs–N"],
+"30043":[33.99,-84.00,3,"Lawrenceville"],"30161":[34.25,-85.15,1,"Rome"],
+"30143":[34.47,-84.42,1,"Jasper"],"31807":[32.65,-84.80,1,"Ellerslie"],
+"30047":[33.87,-84.11,3,"Lilburn"],"30305":[33.83,-84.39,2,"Atlanta–Buckhead"],
+"30066":[34.03,-84.50,2,"Marietta–N"],"30309":[33.79,-84.39,1,"Atlanta–Midtown"],
+"30338":[33.94,-84.32,5,"Dunwoody"],"30340":[33.90,-84.25,1,"Doraville"],
+"30277":[33.33,-84.66,1,"Sharpsburg"],"30224":[33.24,-84.27,2,"Griffin"],
+"30157":[33.90,-84.84,1,"Dallas"],"30904":[33.47,-82.03,1,"Augusta"],
+"30529":[34.21,-83.47,1,"Commerce"],"30519":[34.07,-83.97,1,"Buford"],
+"30322":[33.79,-84.32,1,"Atlanta–Emory"],"30078":[33.86,-84.01,1,"Snellville"],
+"30064":[33.93,-84.62,4,"Marietta–W"],"31522":[31.18,-81.38,1,"St. Simons"],
+"30101":[34.07,-84.70,1,"Acworth"],"30568":[34.95,-83.40,1,"Rabun Gap"],
+"30518":[34.11,-84.00,2,"Buford"],"31069":[32.46,-83.73,1,"Perry"],
+"30542":[34.19,-83.90,1,"Flowery Branch"],"31632":[30.99,-83.37,1,"Hahira"],
+"30650":[33.59,-83.46,1,"Madison"],"30093":[33.91,-84.18,1,"Norcross"],
+"30328":[33.93,-84.38,3,"Sandy Springs"],"30252":[33.49,-84.08,2,"McDonough"],
+"31811":[32.75,-84.87,1,"Hamilton"],"30076":[34.03,-84.32,1,"Roswell"],
+"30308":[33.77,-84.38,1,"Atlanta–Midtown"],"30333":[33.79,-84.32,1,"Atlanta"],
+"30094":[33.60,-84.00,1,"Conyers"],"30188":[34.13,-84.47,1,"Woodstock"],
+"30549":[34.11,-83.60,1,"Jefferson"],"30341":[33.89,-84.29,2,"Chamblee"],
+"30545":[34.72,-83.73,1,"Helen"],"30082":[33.86,-84.55,1,"Smyrna"],
+"30132":[34.01,-84.87,1,"Dallas"],"30263":[33.37,-84.84,3,"Newnan"],
+"30276":[33.29,-84.56,1,"Senoia"],"30303":[33.75,-84.39,1,"Atlanta–Downtown"],
+"30115":[34.26,-84.44,2,"Canton"],"30346":[33.92,-84.34,1,"Dunwoody"],
+"30126":[33.81,-84.57,1,"Mableton"],"30083":[33.79,-84.17,1,"Stone Mountain"],
+"30046":[33.93,-83.97,2,"Lawrenceville"],"30233":[33.30,-83.97,1,"Jackson"],
+"30084":[33.85,-84.21,1,"Tucker"],"31088":[32.57,-83.65,1,"Warner Robins"],
+"30317":[33.75,-84.31,1,"Atlanta–Kirkwood"],"31326":[32.29,-81.24,1,"Rincon"],
+"30253":[33.45,-84.21,1,"McDonough"],"31513":[31.78,-82.35,1,"Baxley"],
+"30236":[33.52,-84.34,1,"Jonesboro"],"30067":[33.94,-84.47,1,"Marietta"],
+"30527":[34.47,-83.77,1,"Clermont"],"30183":[34.33,-84.55,1,"Waleska"]
+};
+
+const CD = [
+ ["5","Atlanta core / Decatur / Druid Hills",44],["6","Sandy Springs / Buckhead / N. Fulton",31],
+ ["11","Cobb / Cherokee / N. metro",27],["4","DeKalb / Rockdale",20],
+ ["7","Gwinnett / Forsyth",19],["10","Augusta / CSRA / Northeast",13],
+ ["9","Northeast Georgia mountains",10],["3","West central / Coweta / Houston",10],
+ ["13","South metro / Henry / Clayton",8],["1","Coastal / Savannah",7],
+ ["14","Northwest Georgia",5],["2","Southwest Georgia",5],
+ ["8","South central",3],["12","Middle / east Georgia",2]
+];
+
+const rad = n => Math.sqrt(n) * 3.0;
+
+function tables(){
+  const rows = Object.entries(Z).map(([z,v])=>({z,a:v[3],n:v[2]}))
+    .sort((a,b)=>b.n-a.n || a.z.localeCompare(b.z)).slice(0,42);
+  const t1 = d3.select('#t1').selectAll('tr').data(rows).join('tr');
+  t1.append('td').text(d=>d.z);
+  t1.append('td').text(d=>d.a);
+  t1.append('td').attr('class','n').text(d=>d.n);
+
+  const t2 = d3.select('#t2').selectAll('tr').data(CD).join('tr');
+  t2.append('td').text(d=>'CD '+d[0]);
+  t2.append('td').text(d=>d[1]);
+  t2.append('td').attr('class','n').text(d=>d[2]);
+}
+
+function render(counties){
+  [['#svg1','dot'],['#svg2','square']].forEach(([id,shape])=>{
+    const svg = d3.select(id);
+    const proj = d3.geoAlbers().rotate([84,0]).fitExtent([[12,12],[548,668]], counties);
+    svg.append('g').selectAll('path').data(counties.features)
+       .join('path').attr('class','county').attr('d', d3.geoPath(proj));
+    const g = svg.append('g');
+    Object.values(Z).forEach(v=>{
+      const p = proj([v[1], v[0]]); if(!p) return;
+      if(shape==='dot')
+        g.append('circle').attr('class','mk-dot')
+         .attr('cx',p[0]).attr('cy',p[1]).attr('r',rad(v[2]));
+      else { const s = rad(v[2])*1.78;
+        g.append('rect').attr('class','mk-square')
+         .attr('x',p[0]-s/2).attr('y',p[1]-s/2).attr('width',s).attr('height',s); }
+    });
+  });
+}
+
+tables();
+fetch('https://cdn.jsdelivr.net/npm/us-atlas@3/counties-10m.json')
+  .then(r=>r.json())
+  .then(us=>{
+    const fc = topojson.feature(us, us.objects.counties);
+    fc.features = fc.features.filter(f => String(f.id).padStart(5,'0').startsWith('13'));
+    render(fc);
+    document.title = 'Georgia Member Distribution — ready to print';
+  })
+  .catch(e=>{
+    const d = document.getElementById('err');
+    d.style.display='block';
+    d.innerHTML = '<b>County shapes could not load</b> (no internet, or CDN blocked).'
+      + ' Tables below are complete and printable. Error: ' + e.message;
+  });
+</script>
+</body></html>
